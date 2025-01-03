@@ -8,6 +8,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.LinkedHashMap;
+import java.util.Collections;
+
 
 import org.apache.commons.math3.distribution.LaplaceDistribution;
 import org.apache.commons.math3.ml.distance.EarthMoversDistance;
@@ -68,7 +71,8 @@ public class Main {
 					String[] twocoords = s.split(",");
 					double xCoord = Double.parseDouble(twocoords[0]);
 					double yCoord = Double.parseDouble(twocoords[1]);
-					newTraj.addCoordinates(xCoord, yCoord);					
+					String label = (twocoords[2]);
+					newTraj.addCoordinates(xCoord, yCoord, label);					
 				}
 				tbR.add(newTraj);
 				//System.out.println("Trajectory had " + newTraj.getSize() + " locations.");
@@ -161,7 +165,7 @@ public class Main {
 			Trajectory t = data.get(i);
 			for (int j = 0; j < t.getSize(); j++) {
 				Point thisp = t.getPoint(j);
-				writer.print(thisp.getX() + "," + thisp.getY() + ";");
+				writer.print(thisp.getX() + "," + thisp.getY() + "," + thisp.getLabel() + ";");
 			}
 			writer.print("\r\n");
 		}
@@ -176,7 +180,7 @@ public class Main {
 			for (Cell c : cellsForConversion) {
 				out.addPoint(c.sampleRandomPoint());
 			}		
-			tbr.add(out);		
+			tbr.add(out);
 		}
 		return tbr;
 	}
@@ -270,6 +274,16 @@ public class Main {
 				}
 			}
 		}
+		// TEST: after creating noisyProbs:
+		int nonZeroTransitions = 0;
+		int totalCells = 0;
+		for (int i = 0; i < cells.size(); i++) {
+    		for (int j = 0; j < cells.size(); j++) {
+        		if (noisyProbs[i][j] > 0) nonZeroTransitions++;
+				totalCells++;
+    		}
+		}
+		System.out.println("Non-zero transitions in Markov matrix: " + nonZeroTransitions + " out of total possible: " + totalCells);
 		// DEBUG - START
 		//Main.printMatrix(noisyProbs);
 		for (int i = 0; i < cells.size(); i++) {
@@ -295,14 +309,72 @@ public class Main {
 	}
 	
 	public static List<double[][]> precomputeMarkov(double[][] oneStepMatrix, int maxSteps) {
-		List<double[][]> tbR = new ArrayList<double[][]>();
+		//List<double[][]> tbR = new ArrayList<>(maxSteps + 1);
+    	List<double[][]> tbR = new ArrayList<>(maxSteps);
 		tbR.add(oneStepMatrix); // placeholder dummy, 0-step matrix
 		tbR.add(oneStepMatrix); // 1-step matrix
+		int size = oneStepMatrix.length;
+		/*
 		for (int i = 2; i <= maxSteps; i++) {
-			double[][] prevStepMatrix = tbR.get(i-1);
-			double[][] currStepMatrix = Main.matrixMultiply(prevStepMatrix, oneStepMatrix);
-			tbR.add(currStepMatrix);
+			//double[][] prevStepMatrix = tbR.get(i-1);
+			//double[][] currStepMatrix = Main.matrixMultiply(prevStepMatrix, oneStepMatrix);
+			//tbR.add(currStepMatrix);
+			// Pre-allocate matrices to avoid repeated allocations
+			tbR.add(new double[size][size]);
 		}
+		// More efficient matrix multiplication
+		for (int step = 2; step <= maxSteps; step++) {
+			double[][] prev = tbR.get(step-1);
+			double[][] curr = tbR.get(step);
+			
+			for (int i = 0; i < size; i++) {
+				for (int j = 0; j < size; j++) {
+					double sum = 0;
+					for (int k = 0; k < size; k++) {
+						sum += prev[i][k] * oneStepMatrix[k][j];
+					}
+					curr[i][j] = sum;
+				}
+			}
+		}
+		return tbR;
+		*/
+		// Calculate powers 2-12 directly
+		for (int step = 2; step <= 12; step++) {
+			double[][] curr = new double[size][size];
+			double[][] prev = tbR.get(step-1);
+			
+			for (int i = 0; i < size; i++) {
+				for (int j = 0; j < size; j++) {
+					double sum = 0;
+					for (int k = 0; k < size; k++) {
+						sum += prev[i][k] * oneStepMatrix[k][j];
+					}
+					curr[i][j] = sum;
+				}
+			}
+			tbR.add(curr);
+		}
+		
+		// Now add powers of 2: 16, 32, 64, 128
+		// Start with power 16 (square power 8)
+		for (int p = 4; p <= 7; p++) {  // 2^4=16, 2^5=32, 2^6=64, 2^7=128
+			double[][] prev = tbR.get(tbR.size()-1);
+			double[][] curr = new double[size][size];
+			
+			// Square the previous matrix
+			for (int i = 0; i < size; i++) {
+				for (int j = 0; j < size; j++) {
+					double sum = 0;
+					for (int k = 0; k < size; k++) {
+						sum += prev[i][k] * prev[k][j];
+					}
+					curr[i][j] = sum;
+				}
+			}
+			tbR.add(curr);
+		}
+		
 		return tbR;
 	}
 	
@@ -320,9 +392,113 @@ public class Main {
                     c[i][j] += a[i][k] * b[k][j];
         return c;
     }
+	private static class MarkovPowerCache {
+		private final int maxCacheSize = 200; // Store only most frequently needed matrices
+		private final Map<Integer, double[][]> cache;
+		private final double[][] baseMatrix;
+		private final int matrixSize;
+		
+		public MarkovPowerCache(double[][] oneStepMatrix) {
+			this.baseMatrix = oneStepMatrix;
+			this.matrixSize = oneStepMatrix.length;
+			// Using LinkedHashMap as LRU cache
+			this.cache = new LinkedHashMap<Integer, double[][]>(maxCacheSize + 1, .75F, true) {
+				protected boolean removeEldestEntry(Map.Entry<Integer, double[][]> eldest) {
+					return size() > maxCacheSize;
+				}
+			};
+			// Always cache step 1
+			cache.put(1, oneStepMatrix);
+		}
+		
+		public double[][] getPowerMatrix(int power) {
+			if (power <= 0) return null;
+			if (power == 1) return baseMatrix;
+			
+			// Check cache first
+			double[][] cached = cache.get(power);
+			if (cached != null) {
+				return cached;
+			}
+			
+			// Binary exponentiation: try to compose from powers of 2
+				// e.g., power 7 = 2^2 + 2^1 + 2^0 (4 + 2 + 1)
+				ArrayList<Integer> powersList = new ArrayList<>(cache.keySet());
+				Collections.sort(powersList);
+				
+				double[][] result = baseMatrix;
+				int remainingPower = power - 1;
+				
+				while (remainingPower > 0) {
+					// Find largest cached power we can use
+					int bestPower = 1;
+					for (int p : powersList) {
+						if (p <= remainingPower && p > bestPower) {
+							bestPower = p;
+						}
+					}
+					
+					double[][] nextMatrix = cache.get(bestPower);
+					if (nextMatrix == null) {
+						// Need to compute this power
+						nextMatrix = multiplyMatrices(result, baseMatrix);
+						synchronized(cache) {
+							cache.put(bestPower, nextMatrix);
+						}
+					}
+					
+					result = multiplyMatrices(result, nextMatrix);
+					remainingPower -= bestPower;
+				}
+				
+				synchronized(cache) {
+					cache.put(power, result);
+				}
+				return result;
+		}
+		private double[][] multiplyMatrices(double[][] a, double[][] b) {
+			int n = a.length;
+			double[][] result = new double[n][n];
+			
+			// Block multiplication for better cache usage
+			int blockSize = 32;
+			for (int i0 = 0; i0 < n; i0 += blockSize) {
+				for (int j0 = 0; j0 < n; j0 += blockSize) {
+					for (int k0 = 0; k0 < n; k0 += blockSize) {
+						for (int i = i0; i < Math.min(i0 + blockSize, n); i++) {
+							for (int j = j0; j < Math.min(j0 + blockSize, n); j++) {
+								double sum = 0;
+								for (int k = k0; k < Math.min(k0 + blockSize, n); k++) {
+									sum += a[i][k] * b[k][j];
+								}
+								result[i][j] += sum;
+							}
+						}
+					}
+				}
+			}
+			return result;
+		}
+	}
+
+	// Cache for cell indices and adjacent cells
+	private static Map<Cell, Integer> cellToIndexMap = new HashMap<>();
+	private static Map<Cell, List<Cell>> adjacentCellsCache = new HashMap<>();
+
+	public static void initializeCaches(Grid g) {
+		cellToIndexMap.clear();
+		adjacentCellsCache.clear();
+		
+		List<Cell> cells = g.getCells();
+		for (int i = 0; i < cells.size(); i++) {
+			cellToIndexMap.put(cells.get(i), i);
+			adjacentCellsCache.put(cells.get(i), g.getAdjacentCells(cells.get(i)));
+		}
+	}
 	
 	private static Cell findWithMarkov(Cell prevCell, Cell eventualCell, 
 			double[][] step1matrix, double[][] stepNmatrix, Grid g) {
+		
 		List<Cell> candidateCells = g.getAdjacentCells(prevCell);
 		double[] candidateProbs = new double[candidateCells.size()];
 		for (int i = 0; i < candidateProbs.length; i++) {
@@ -371,6 +547,44 @@ public class Main {
 		for (int i = 0; i < normalizedProbabilities.size(); i++) {
 			seenSoFar = seenSoFar + normalizedProbabilities.get(i);
 			if (seenSoFar >= randomVal) {
+				// Get the x,y coordinates from the selected cell
+				String cell_ij_name = candidateCells.get(i).getName();
+				
+				// Create list of cells at this location, grouped by label
+				Map<String, Cell> cellsByLabel = new HashMap<>();
+				for (Cell c : candidateCells) {
+					if (c.getName().equals(cell_ij_name)) {
+						cellsByLabel.put(c.getLabel(), c);
+					}
+				}
+				
+				// Single random draw for label selection
+				double randomLabelVal = new Random().nextDouble();
+				
+				// Return cell based on probability thresholds
+				if (cellsByLabel.containsKey("residence") && randomLabelVal < 0.57) {
+					return cellsByLabel.get("residence");
+				}
+				if (cellsByLabel.containsKey("other") && randomLabelVal < 0.69) {
+					return cellsByLabel.get("other");
+				}
+				if (cellsByLabel.containsKey("unspecified") && randomLabelVal < 0.80) {
+					return cellsByLabel.get("unspecified");
+				}
+				if (cellsByLabel.containsKey("retail") && randomLabelVal < 0.90) {
+					return cellsByLabel.get("retail");
+				}
+				if (cellsByLabel.containsKey("school") && randomLabelVal < 0.95) {
+					return cellsByLabel.get("school");
+				}
+				if (cellsByLabel.containsKey("college") && randomLabelVal < 0.96) {
+					return cellsByLabel.get("college");
+				}
+				if (cellsByLabel.containsKey("worship")) {
+					return cellsByLabel.get("worship");
+				}
+				
+				// Fallback: return the original cell if no label match
 				return candidateCells.get(i);
 			}
 		}
@@ -383,7 +597,49 @@ public class Main {
 		} else {
 			return eventualCell;
 		}
+		/*
+		//optimized version
+		List<Cell> candidateCells = adjacentCellsCache.getOrDefault(prevCell, 
+        g.getAdjacentCells(prevCell));
+    
+		if (candidateCells.isEmpty()) return eventualCell;
+		
+		double[] candidateProbs = new double[candidateCells.size()];
+		double totalProb = 0;
+		
+		int prevIdx = cellToIndexMap.getOrDefault(prevCell, g.getPosInListForm(prevCell));
+		int eventualIdx = cellToIndexMap.getOrDefault(eventualCell, g.getPosInListForm(eventualCell));
+		
+		// Calculate all probabilities in one pass
+		for (int i = 0; i < candidateCells.size(); i++) {
+			Cell candidate = candidateCells.get(i);
+			int candIdx = cellToIndexMap.getOrDefault(candidate, g.getPosInListForm(candidate));
+			
+			double prob1 = step1matrix[prevIdx][candIdx];
+			double prob2 = stepNmatrix[candIdx][eventualIdx];
+			candidateProbs[i] = prob1 * prob2;
+			totalProb += candidateProbs[i];
+		}
+		
+		// Handle zero probability case
+		if (totalProb <= 0) {
+			return candidateCells.get(new Random().nextInt(candidateCells.size()));
+		}
+		
+		// Sample from distribution more efficiently
+		double r = new Random().nextDouble() * totalProb;
+		double cumSum = 0;
+		for (int i = 0; i < candidateCells.size(); i++) {
+			cumSum += candidateProbs[i];
+			if (r <= cumSum) {
+				return candidateCells.get(i);
+			}
+		}
+		
+		return candidateCells.get(candidateCells.size() - 1);
+		*/
 	}
+
 	
 	public static Cell getNthDensestCell(List<GridTrajectory> origDBgrid, Grid grid, int N) {
 		List<Cell> cellList = grid.getCells();
@@ -450,11 +706,20 @@ public class Main {
 	
 	public static List<GridTrajectory> generateSyntheticTrajs(Grid g, TripDistribution td, 
 			LengthDistribution ld, double[][] markovProbs, int desiredTrajCount) {
+		// Initialize caches
+    	initializeCaches(g);
+		
 		List<GridTrajectory> tbr = new ArrayList<GridTrajectory>();
+
 		// pre-compute Markov transition matrices: 1-step, 2-step, 3-step, ..., 100-step
 		List<double[][]> transitionMatrices = new ArrayList<double[][]>(); 
-		transitionMatrices = Main.precomputeMarkov(markovProbs, 100);
-		//System.out.println("Pre-computation of Markov transition probabilities complete.");
+		transitionMatrices = Main.precomputeMarkov(markovProbs, 128);
+		// Create Markov power cache instead of precomputing all matrices
+		//MarkovPowerCache markovCache = new MarkovPowerCache(markovProbs);
+		//double[][] step1matrix = markovCache.getPowerMatrix(1);
+		double[][] step1matrix = transitionMatrices.get(1);
+		System.out.println("Pre-computation of Markov transition probabilities complete.");
+		int matrixIndex;
 		// synthesize trajectories
 		for (int cnt = 0; cnt < desiredTrajCount; cnt++) {
 			// determine trip
@@ -467,6 +732,9 @@ public class Main {
 			int totalLen = minLen + extraLen;
 			//System.out.println("start: " + startCell + ", end: " + endCell + ", totalLen: " +
 			//		totalLen);
+			if (cnt % 5000 == 0) {
+				System.out.println("gen traj #" + cnt + ": " + "start: " + startCell + ", end: " + endCell + ", totalLen: " + totalLen);
+			}
 			// determine intermediate cells
 			Cell[] newTrajCells = new Cell[totalLen];
 			newTrajCells[0] = startCell;
@@ -474,17 +742,38 @@ public class Main {
 			for (int i = 1; i < totalLen-1; i++) { // loops intermediate cells
 				Cell prevCell = newTrajCells[i-1];
 				Cell eventualCell = newTrajCells[newTrajCells.length-1];
-				int stepsToEventual = totalLen-i-1;
-				double[][] step1matrix = transitionMatrices.get(1);
-				double[][] stepNmatrix = transitionMatrices.get(stepsToEventual);
-				newTrajCells[i] = findWithMarkov(prevCell, eventualCell, step1matrix, 
-						stepNmatrix, g);
+				//int stepsToEventual = totalLen-i-1;
+				int stepsToEventual = Math.min(99, totalLen-i-1);
+
+				//double[][] stepNmatrix = markovCache.getPowerMatrix(stepsToEventual);
+				//double[][] stepNmatrix = transitionMatrices.get(stepsToEventual);
+				if (stepsToEventual <= 12) {
+					matrixIndex = stepsToEventual;
+				} else if (stepsToEventual <= 16) {
+					matrixIndex = 13;  // Use power 16
+				} else if (stepsToEventual <= 32) {
+					matrixIndex = 14;  // Use power 32
+				} else if (stepsToEventual <= 64) {
+					matrixIndex = 15;  // Use power 64
+				} else {
+					matrixIndex = 16;  // Use power 128
+				}
+				matrixIndex = Math.min(matrixIndex, transitionMatrices.size() - 1);
+				double[][] stepNmatrix = transitionMatrices.get(matrixIndex);
+				//System.out.println("found step N matrix of size: " + stepsToEventual);
+				newTrajCells[i] = findWithMarkov(prevCell, eventualCell, step1matrix, stepNmatrix, g);
+				//System.out.println("found new cell w markov");
 			}
 			// initialize and add to synthetic DB
 			GridTrajectory synTraj = new GridTrajectory(newTrajCells);
 			tbr.add(synTraj);
+			//debug
+			if (cnt % 5000 == 0) {
+				System.out.println("gen traj #" + cnt + ": " + "start: " + startCell + ", end: " + endCell + ", totalLen: " + totalLen);
+			}
 		}
 		return tbr;
+	
 	}
 	
 	public static List<Trajectory> getOutlierTrajs (List<Trajectory> trajs, double[] scores, 
@@ -969,7 +1258,8 @@ public class Main {
 			double totalEpsilon, boolean attacksON) throws Exception {
 		// Hardcoded parameters - BEGIN
 		boolean interp = true; // interpolate cells so that every move is to adjacent cell
-		int cellCount = 6;
+		//cell count originally 7 - for larger input regions, more starting cells are needed
+		int cellCount = 10;
 		double[] budgetDistnWeights = {0.05, 0.35, 0.50, 0.10}; // grid, Markov, trip, length
 		// Hardcoded parameters - END
 		
@@ -998,7 +1288,15 @@ public class Main {
 		System.out.println("Generating synthetic trajectory database...");
 		List<Trajectory> syntheticDB = generateAttackResilientTrajectories(grid, markovTransitionProbs,
 				td, ld, origDBgrid.size(), attacksON, origDBgrid, originalDatabase);
-		
+		System.out.println("Grid Bounds - minx: " + grid.getMinX() + " maxx: " + grid.getMaxX() + " miny: " + grid.getMinY() + " maxy: " + grid.getMaxY());
+		System.out.println("Grid cells on one row/col (sq. root of total cells): " + grid.getN() + "  #total cells: " + grid.getCells().size());
+		System.out.println("Grid x increment: " + grid.getXIncrement() + "  y increment: " + grid.getYIncrement());
+		System.out.println("cell matrix: " + grid.getCellMatrix());
+		int totalNumCells = 0; 
+		for (int i = 0; i < grid.getCells().size(); i++) {
+			totalNumCells += grid.getCells().get(i).getNumCells();
+		}
+		System.out.println("total number of cells after discretization: " + totalNumCells);
 		return syntheticDB;
 	}
 	
@@ -1006,8 +1304,8 @@ public class Main {
 	public static void main(String[] args) throws Exception {
 		
 		// PART 0 - PARAMETERS
-		String inputFilename = "brinkhoff.dat";  // file name/path for actual trajectory database
-		double totalEpsilon = 1.0;  // total privacy budget (epsilon)
+		String inputFilename = "VA_all_persistent_trajs.txt";  // file name/path for actual trajectory database
+		double totalEpsilon = 1.65;  // total privacy budget (epsilon)
 		boolean attacksON = false;  // want to defend against attacks? (Section 3.3)
 		// End of Part 0
 		
@@ -1016,7 +1314,7 @@ public class Main {
 		// End of part 1
 		
 		// Part 2: Generate synthetic trajectory database - repeat N times
-		for (int i = 0; i < 5; i++) {
+		for (int i = 0; i < 1; i++) {
 			List<Trajectory> syntheticDatabase = 
 					Synthesize_Trajectories(originalDatabase, totalEpsilon, attacksON);
 			String outputFileName = inputFilename + "-eps" + totalEpsilon + "-iteration" + i + ".dat";
