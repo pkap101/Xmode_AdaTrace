@@ -8,6 +8,9 @@ public class Grid {
 	Cell[][] topLevelCells; // NxN matrix of cells
 	
 	private HashMap<Cell, Integer> posInListForm;  // for efficiency
+
+	private double minX, maxX, minY, maxY;
+    	private double xIncrement, yIncrement;
 	
 	public Grid (int cellCount, double minX, double maxX, double minY, double maxY) {
 		// initialize 
