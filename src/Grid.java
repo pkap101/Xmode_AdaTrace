@@ -33,6 +33,12 @@ public class Grid {
 	public int getN() {
 		return this.topLevelCells.length;
 	}
+	public double getMinX() { return minX; }
+    	public double getMaxX() { return maxX; }
+    	public double getMinY() { return minY; }
+    	public double getMaxY() { return maxY; }
+    	public double getXIncrement() { return (maxX - minX) / getN(); }
+    	public double getYIncrement() { return (maxY - minY) / getN(); }
 	
 	public double getXofCell(Cell c1) {
 		for (int i = 0; i < topLevelCells.length; i++) {
