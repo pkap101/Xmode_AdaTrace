@@ -969,7 +969,7 @@ public class Main {
 			double totalEpsilon, boolean attacksON) throws Exception {
 		// Hardcoded parameters - BEGIN
 		boolean interp = true; // interpolate cells so that every move is to adjacent cell
-		int cellCount = 6;
+		int cellCount = 20;
 		double[] budgetDistnWeights = {0.05, 0.35, 0.50, 0.10}; // grid, Markov, trip, length
 		// Hardcoded parameters - END
 		
@@ -998,7 +998,15 @@ public class Main {
 		System.out.println("Generating synthetic trajectory database...");
 		List<Trajectory> syntheticDB = generateAttackResilientTrajectories(grid, markovTransitionProbs,
 				td, ld, origDBgrid.size(), attacksON, origDBgrid, originalDatabase);
-		
+		System.out.println("Grid Bounds - minx: " + grid.getMinX() + " maxx: " + grid.getMaxX() + " miny: " + grid.getMinY() + " maxy: " + grid.getMaxY());
+		System.out.println("Grid cells on one row/col (sq. root of total cells): " + grid.getN() + "  #total cells: " + grid.getCells().size());
+		System.out.println("Grid x increment: " + grid.getXIncrement() + "  y increment: " + grid.getYIncrement());
+		System.out.println("cell matrix: " + grid.getCellMatrix());
+		int totalNumCells = 0; 
+		for (int i = 0; i < grid.getCells().size(); i++) {
+			totalNumCells += grid.getCells().get(i).getNumCells();
+		}
+		System.out.println("total number of cells after discretization: " + totalNumCells);
 		return syntheticDB;
 	}
 	
@@ -1006,8 +1014,8 @@ public class Main {
 	public static void main(String[] args) throws Exception {
 		
 		// PART 0 - PARAMETERS
-		String inputFilename = "brinkhoff.dat";  // file name/path for actual trajectory database
-		double totalEpsilon = 1.0;  // total privacy budget (epsilon)
+		String inputFilename = "VA_all_persistent_trajs.txt";  // file name/path for actual trajectory database
+		double totalEpsilon = 1.5;  // total privacy budget (epsilon)
 		boolean attacksON = false;  // want to defend against attacks? (Section 3.3)
 		// End of Part 0
 		
@@ -1016,7 +1024,7 @@ public class Main {
 		// End of part 1
 		
 		// Part 2: Generate synthetic trajectory database - repeat N times
-		for (int i = 0; i < 5; i++) {
+		for (int i = 0; i < 1; i++) {
 			List<Trajectory> syntheticDatabase = 
 					Synthesize_Trajectories(originalDatabase, totalEpsilon, attacksON);
 			String outputFileName = inputFilename + "-eps" + totalEpsilon + "-iteration" + i + ".dat";
