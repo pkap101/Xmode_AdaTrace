@@ -27,6 +27,7 @@ public class LengthDistribution {
 	private Map<String, Integer> maxExtraLengthAllowed;
 	
 	public LengthDistribution (List<GridTrajectory> inputDB, Grid grid, double eps) {
+		/*
 		List<Cell> cells = grid.getCells();
 		List<GridTrajectory> trajs = new ArrayList<GridTrajectory>();
 		for (GridTrajectory t : inputDB) {
@@ -151,6 +152,93 @@ public class LengthDistribution {
 				maxExtraLengthAllowed.put(currentTrip, (int) Math.round(MAX*1.3));
 			}
 		}
+		*/
+		this.grid = grid;
+        distributionTypeMap = new HashMap<>();
+        maxExtraLengthAllowed = new HashMap<>();
+        
+        // First pass: collect actually occurring start-end pairs and their trajectories
+        Map<String, List<GridTrajectory>> tripGroups = new HashMap<>();
+        Map<String, List<Integer>> lengthGroups = new HashMap<>();
+        
+        for (GridTrajectory traj : inputDB) {
+            Cell startCell = traj.getCells().get(0);
+            Cell endCell = traj.getCells().get(traj.getCells().size()-1);
+            
+            int startX = (int)grid.getXofCell(startCell);
+            int startY = (int)grid.getYofCell(startCell);
+            int endX = (int)grid.getXofCell(endCell);
+            int endY = (int)grid.getYofCell(endCell);
+            
+            String tripKey = startX + "," + startY + "->" + endX + "," + endY;
+            
+            // Initialize lists if this is a new trip
+            tripGroups.computeIfAbsent(tripKey, k -> new ArrayList<>()).add(traj);
+            
+            int minLength = grid.findShortestLengthBetween(startCell, endCell);
+            int extraLength = traj.getCells().size() - minLength;
+            lengthGroups.computeIfAbsent(tripKey, k -> new ArrayList<>()).add(extraLength);
+        }
+
+        // Process only the trips that actually occur
+        for (String tripKey : tripGroups.keySet()) {
+            List<Integer> lengths = lengthGroups.get(tripKey);
+            
+            // Calculate statistics
+            int max = 0;
+            int sum = 0;
+            for (int length : lengths) {
+                max = Math.max(max, length);
+                sum += length;
+            }
+            
+            if (lengths.isEmpty() || max == 0) {
+                distributionTypeMap.put(tripKey, new UniformIntegerDistribution(0, 0));
+                maxExtraLengthAllowed.put(tripKey, 0);
+                continue;
+            }
+
+            // Add Laplace noise to sum for differential privacy
+            LaplaceDistribution ld = new LaplaceDistribution(0, max/eps);
+            double noisySum = sum + ld.sample();
+            double dpMean = Math.max(0, noisySum / lengths.size());
+            
+            // Calculate distribution fits
+            double[] observed = getObservedProbsArray(lengths);
+            
+            // Create candidate distributions
+            UniformIntegerDistribution ud = new UniformIntegerDistribution(0, max);
+            GeometricDistribution gd = new GeometricDistribution(dpMean < 1 ? 1.0 : 1.0/dpMean);
+            PoissonDistribution pd = new PoissonDistribution(dpMean <= 0 ? 0.1 : dpMean);
+            
+            // Calculate expected probabilities (with fast array allocation)
+            double[] uniformExpected = new double[max + 1];
+            double[] geometricExpected = new double[max + 1];
+            double[] poissonExpected = new double[max + 1];
+            
+            for (int i = 0; i <= max; i++) {
+                uniformExpected[i] = ud.probability(i);
+                geometricExpected[i] = Math.max(gd.probability(i), 0.000001);
+                poissonExpected[i] = pd.probability(i);
+            }
+            
+            // Compare distributions using Earth Mover's Distance
+            EarthMoversDistance emd = new EarthMoversDistance();
+            double uniformDist = emd.compute(uniformExpected, observed);
+            double geometricDist = emd.compute(geometricExpected, observed);
+            double poissonDist = emd.compute(poissonExpected, observed);
+            
+            // Select best distribution
+            if (uniformDist <= geometricDist && uniformDist <= poissonDist) {
+                distributionTypeMap.put(tripKey, ud);
+            } else if (geometricDist <= uniformDist && geometricDist <= poissonDist) {
+                distributionTypeMap.put(tripKey, gd);
+            } else {
+                distributionTypeMap.put(tripKey, pd);
+            }
+            
+            maxExtraLengthAllowed.put(tripKey, (int)(max * 1.3));
+        }
 	}
 	
 	private long[] getObservedCountsArray(List<Integer> list) {
