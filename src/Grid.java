@@ -12,6 +12,10 @@ public class Grid {
 	public Grid (int cellCount, double minX, double maxX, double minY, double maxY) {
 		// initialize 
 		topLevelCells = new Cell[cellCount][cellCount];
+		this.minX = minX;
+		this.maxX = maxX;
+		this.minY = minY;
+		this.maxY = maxY;
 		
 		// fill with cells
 		double xIncrement = (maxX-minX)/((double) cellCount);
