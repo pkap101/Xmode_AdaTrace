@@ -1259,7 +1259,7 @@ public class Main {
 		// Hardcoded parameters - BEGIN
 		boolean interp = true; // interpolate cells so that every move is to adjacent cell
 		//cell count originally 7 - for larger input regions, more starting cells are needed
-		int cellCount = 10;
+		int cellCount = 7;
 		double[] budgetDistnWeights = {0.05, 0.35, 0.50, 0.10}; // grid, Markov, trip, length
 		// Hardcoded parameters - END
 		
@@ -1305,7 +1305,7 @@ public class Main {
 		
 		// PART 0 - PARAMETERS
 		String inputFilename = "VA_all_persistent_trajs.txt";  // file name/path for actual trajectory database
-		double totalEpsilon = 1.65;  // total privacy budget (epsilon)
+		double totalEpsilon = 1.55;  // total privacy budget (epsilon)
 		boolean attacksON = false;  // want to defend against attacks? (Section 3.3)
 		// End of Part 0
 		

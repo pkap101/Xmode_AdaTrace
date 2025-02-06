@@ -19,8 +19,12 @@ public class TripDistribution {
 	
 	private List<Cell> cellList;
 	private double[][] tripProbabilities;  // cellList x cellList
+	private Grid grid;
+    private double distanceDecayRate = 0.2; // Controls how quickly probability decreases with distance
+
 	
 	public TripDistribution(List<GridTrajectory> trajs, Grid g, double privBudget) {
+		this.grid = g;
 		this.cellList = g.getCells();
 		this.tripProbabilities = new double[cellList.size()][cellList.size()];
 		
@@ -59,14 +63,20 @@ public class TripDistribution {
 		}
 		
 		// add noise to tripCounts to satisfy differential privacy
+		LaplaceDistribution ld = new LaplaceDistribution(0, 1.0/privBudget);
+        double totalCount = 0;
 		for (int i = 0; i < cellList.size(); i++) {
 			for (int j = 0; j < cellList.size(); j++) {
 				int noiseFreeCount = tripCounts[i][j];
-				LaplaceDistribution ld = new LaplaceDistribution(0, 1.0/((double)privBudget));
+				//LaplaceDistribution ld = new LaplaceDistribution(0, 1.0/((double)privBudget));
 				double noisyCount = noiseFreeCount + ld.sample();
 				if (noisyCount < 0)
 					noisyCount = 0;
-				tripCounts[i][j] = (int) Math.round(noisyCount); // put the noisy value back in
+				// Apply distance-based decay
+                double distance = getCellDistance(cellList.get(i), cellList.get(j));
+                double distanceWeight = Math.exp(-distanceDecayRate * distance);
+				tripProbabilities[i][j] = (noisyCount * distanceWeight);
+				//tripCounts[i][j] = (int) Math.round(noisyCount); // put the noisy value back in
 			}
 		}
 		
@@ -77,7 +87,7 @@ public class TripDistribution {
 				noisyNoTraj = noisyNoTraj + tripCounts[i][j];
 			}
 		}
-		//System.out.println("(From trip distn) Noisy # of trajs: " + noisyNoTraj);
+		System.out.println("(From trip distn) Noisy # of trajs: " + noisyNoTraj);
 		for (int i = 0; i < cellList.size(); i++) {
 			for (int j = 0; j < cellList.size(); j++) {
 				tripProbabilities[i][j] = ((double) tripCounts[i][j])/((double)noisyNoTraj);
@@ -139,6 +149,26 @@ public class TripDistribution {
 			}
 		}
 		return tbr;
+	}
+
+	private double getCellDistance(Cell c1, Cell c2) {
+		// Get cell indices
+		double x1 = grid.getXofCell(c1);
+		double y1 = grid.getYofCell(c1);
+		double x2 = grid.getXofCell(c2);
+		double y2 = grid.getYofCell(c2);
+		
+		// Convert to coordinates
+		double xIncrement = grid.getXIncrement();
+		double yIncrement = grid.getYIncrement();
+		
+		double actualX1 = grid.getMinX() + (x1 * xIncrement);
+		double actualY1 = grid.getMinY() + (y1 * yIncrement);
+		double actualX2 = grid.getMinX() + (x2 * xIncrement);
+		double actualY2 = grid.getMinY() + (y2 * yIncrement);
+		
+		// Calculate Euclidean distance
+		return Math.sqrt(Math.pow(actualX2-actualX1, 2) + Math.pow(actualY2-actualY1, 2));
 	}
 
 }

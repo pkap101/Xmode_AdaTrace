@@ -10,20 +10,20 @@ public class Trajectory {
 		this.points = new ArrayList<Point>();
 	}
 	
-	public Trajectory(List<Double> xs, List<Double> ys) {
-		if (xs.size() != ys.size()) {
-			System.out.println("Couldnt create trajectory since xcoordinates size != y.");
+	public Trajectory(List<Double> xs, List<Double> ys, List<String> lbls) {
+		if (xs.size() != ys.size() || xs.size() != lbls.size()) {
+			System.out.println("Couldnt create trajectory since xcoordinates size != y. or != label size");
 			return;
 		}
 		this.points = new ArrayList<Point>();
 		for (int i = 0; i < xs.size(); i++) {
-			Point p = new Point(xs.get(i), ys.get(i));
+			Point p = new Point(xs.get(i), ys.get(i), lbls.get(i));
 			this.points.add(p);
 		}
 	}
 	
-	public void addCoordinates(double xc, double yc) {
-		Point p = new Point(xc, yc);
+	public void addCoordinates(double xc, double yc, String lbl) {
+		Point p = new Point(xc, yc, lbl);
 		this.points.add(p);
 	}
 	
@@ -82,7 +82,7 @@ public class Trajectory {
 		}
 		return currMax;
 	}
-	
+	//returns max distance between any 2 points in trajectory
 	public double getDiameter() {
 		double maxDist = 0.0;
 		for (int i = 0; i < this.getSize(); i++) {
