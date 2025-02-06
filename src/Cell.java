@@ -45,6 +45,9 @@ public class Cell {
 	public String getName() {
 		return this.name;
 	}
+	public int getNumCells() {
+		return this.level2cells.size();
+	}
 	
 	/*
 	// samples and returns a random point in this cell 
