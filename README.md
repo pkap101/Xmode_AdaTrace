@@ -1,12 +1,6 @@
 # AdaTrace
 
-This repository contains a snapshot of the code for AdaTrace: utility-aware, differentially private, and attack-resilient location trace synthesizer. Our paper describing the AdaTrace system was published in ACM CCS 2018:
-
-```
-Utility-Aware Synthesis of Differentially Private and Attack-Resilient Location Traces. 
-Gursoy, M. E., Liu, L., Truex, S., Yu, L., & Wei, W. (2018, October). 
-In Proceedings of the 2018 ACM SIGSAC Conference on Computer and Communications Security (pp. 196-211). ACM.
-```
+This repository contains a snapshot of the code for AdaTrace: utility-aware, differentially private, and attack-resilient location trace synthesizer.
 
 ## Contents 
 
