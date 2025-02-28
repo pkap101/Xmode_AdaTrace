@@ -114,7 +114,8 @@ public class Cell {
 	
 	public void divideFurther (double noisydensity, double EpsLeft, List<Trajectory> db) {
 		//int lvl2cell = (int) Math.ceil(Math.sqrt(noisydensity*unusedEpsilon/200.0));
-		int lvl2cell = (int) Math.ceil( (5*noisydensity/(db.size()*EpsLeft)) );	
+		//int lvl2cell = (int) Math.ceil( (5*noisydensity/(db.size()*EpsLeft)) );	
+		int lvl2cell = Math.max(1, (int)Math.ceil(Math.sqrt(noisydensity*EpsLeft/140.0)));
 
 		System.out.println("Subdividing cell " + this.name + 
                       " with density " + noisydensity + 

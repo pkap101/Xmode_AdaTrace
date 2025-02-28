@@ -25,6 +25,8 @@ public class LengthDistribution {
 	private Map<String, AbstractIntegerDistribution> distributionTypeMap; 
 								// uniform, geometric or poisson
 	private Map<String, Integer> maxExtraLengthAllowed;
+
+	private Grid grid;
 	
 	public LengthDistribution (List<GridTrajectory> inputDB, Grid grid, double eps) {
 		/*
@@ -327,6 +329,15 @@ public class LengthDistribution {
 	public int getLengthSample (Cell startCell, Cell endCell) {
 		String currentTrip = startCell.getName() + "->" + endCell.getName();
 		AbstractIntegerDistribution a = distributionTypeMap.get(currentTrip);
+		if (a == null) {
+			// If no distribution found, use a default
+			//System.out.println("Note: No distribution found for trip " + currentTrip);
+			a = new UniformIntegerDistribution(2, 10);
+        	//distributionTypeMap.put(currentTrip, a);
+        	//maxExtraLengthAllowed.put(currentTrip, 10);
+			int len = a.sample();
+			return len;
+		}
 		int len = a.sample();
 		int maxAllowed = maxExtraLengthAllowed.get(currentTrip);
 		if (len > maxAllowed)
